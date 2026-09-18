@@ -7,6 +7,15 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Synchronize Streamlit Cloud secrets into os.environ
+try:
+    if hasattr(st, "secrets"):
+        for k, v in st.secrets.items():
+            if isinstance(v, (str, int, float, bool)):
+                os.environ[str(k)] = str(v)
+except Exception:
+    pass
+
 from orchestration.graph import travel_pipeline
 from orchestration.state import create_initial_state
 from models.travel_state import TravelState
