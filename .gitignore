@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 *.env
+secrets.toml
 .streamlit/secrets.toml
 
 # Python cache & build
