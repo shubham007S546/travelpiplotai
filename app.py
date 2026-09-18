@@ -39,6 +39,12 @@ def get_live_api_catalog():
     """Returns comprehensive metadata for all live APIs utilized across the system."""
     return [
         {
+            "name": "AviationStack Flight Telemetry",
+            "active": bool(os.getenv("AVIATIONSTACK_API_KEY")),
+            "capability": "Live Scheduled Commercial Flights, Airlines, Status & Air Route Tariffs",
+            "engine": "api.aviationstack.com/v1/flights"
+        },
+        {
             "name": "SerpApi Google Maps & Hotels",
             "active": bool(os.getenv("SERPAPI_API_KEY")),
             "capability": "Live Google Maps Sights, Local Food/Dhabas & Budget Homestays/PGs",

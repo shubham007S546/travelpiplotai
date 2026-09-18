@@ -12,6 +12,7 @@ from models.evidence import Evidence, SourceTier
 from verification.route_verifier import RouteVerifier, RouteVerificationResult
 from verification.fare_verifier import FareVerifier
 from verification.fare_distance_validator import FareDistanceValidator
+from services.aviation_service import AviationService
 from utils.logging import logger
 
 # Ground truth list of major verified railway stations in North/North-West India
@@ -338,6 +339,7 @@ class TransportVerificationPipeline:
 
     def __init__(self):
         self.route_verifier = RouteVerifier()
+        self.aviation_service = AviationService()
 
     def _has_railway_station(self, place: ResolvedPlace) -> Tuple[bool, Optional[str]]:
         """Checks if a place has an active passenger railway station."""
@@ -531,65 +533,21 @@ class TransportVerificationPipeline:
                     confidence=0.98
                 ))
 
-        # 2. Flight Service Verification (Intercity Air Corridors)
-        src_has_flight, src_ap_name, src_ap = self._has_airport(source)
-        dst_has_flight, dst_ap_name, dst_ap = self._has_airport(destination)
-
-        if src_has_flight and dst_has_flight and src_ap.get("iata") != dst_ap.get("iata") and road_km >= 180.0:
-            flight_duration = max(55, min(210, int(road_km / 8.5) + 35))
-            flight_fare = max(2600.0, min(8900.0, round(2100.0 + road_km * 2.7, 0)))
-            airlines_list = src_ap.get("airlines", ["IndiGo", "Air India"])
-            airline_lead = airlines_list[0] if airlines_list else "IndiGo"
-            fl_dep = "08:15"
-            fl_arr_h = 8 + (15 + flight_duration) // 60
-            fl_arr_m = (15 + flight_duration) % 60
-            fl_arr = f"{fl_arr_h % 24:02d}:{fl_arr_m:02d}"
-
-            options.append(TransportOption(
-                id=f"flight-{src_ap['iata'].lower()}-{dst_ap['iata'].lower()}",
-                mode=TransportType.FLIGHT,
-                provider=f"Domestic Scheduled Flight ({src_ap['iata']} ➔ {dst_ap['iata']}) — {airline_lead} / IndiGo",
-                provider_id=f"FLIGHT-{src_ap['iata']}-{dst_ap['iata']}",
-                origin=f"{src_ap_name} ({src_ap['iata']})",
-                destination=f"{dst_ap_name} ({dst_ap['iata']})",
-                actual_stop=f"Non-stop Flight ({src_ap['iata']} to {dst_ap['iata']})",
-                departure=fl_dep,
-                arrival=fl_arr,
-                duration=flight_duration,
-                distance_km=round(road_km * 0.85, 1),
-                fare=flight_fare,
-                currency="INR",
-                fare_type=FareType.ESTIMATED.value,
-                booking_url="https://www.makemytrip.com/flights",
-                source_url="https://www.dgca.gov.in",
-                source_type="Official Scheduled Domestic Air Tariff (DGCA / GDS)",
-                retrieved_at=now_str,
-                verified=True,
-                verification_score=0.96,
-                estimated=True,
-                availability_status="AVAILABLE",
-                fare_model_details={
-                    "tariff_source": "DGCA Domestic Air Tariff Matrix",
-                    "breakdown": f"Direct Air Route {src_ap['iata']}-{dst_ap['iata']} ({round(road_km * 0.85):.0f} km air route) standard domestic economy fare",
-                    "final_fare": flight_fare
-                },
-                route_details={
-                    "routing_engine": "DGCA / AAI Domestic Air Route Network",
-                    "distance_km": round(road_km * 0.85, 1),
-                    "duration_mins": flight_duration,
-                    "rationale": f"Direct scheduled domestic flight between {src_ap_name} and {dst_ap_name}."
-                },
-                evidence=Evidence(
-                    claim=f"Domestic commercial flight connectivity between {src_ap['iata']} and {dst_ap['iata']}: ~₹{flight_fare:.0f}",
-                    value=flight_fare,
-                    source="DGCA / Airport Authority of India (AAI) Schedule",
-                    source_url="https://www.dgca.gov.in",
-                    source_type="Official Civil Aviation Schedule",
-                    confidence=0.96,
-                    tier=SourceTier.TIER_1_OFFICIAL
-                ),
-                confidence=0.96
-            ))
+        # 2. Live Flight Service Verification (AviationStack API & Civil Aviation Corridors)
+        if road_km >= 150.0:
+            try:
+                flight_opts = self.aviation_service.search_flights(
+                    source_city=source.canonical_name,
+                    destination_city=destination.canonical_name,
+                    date_str=date_str,
+                    travelers=travelers,
+                    road_km=road_km
+                )
+                if flight_opts:
+                    options.extend(flight_opts)
+                    messages.append(f"AviationStack API: Discovered {len(flight_opts)} verified commercial flight options.")
+            except Exception as e:
+                logger.warning(f"Aviation flight discovery error: {e}")
 
         # Check Road Transit Availability
         if route_res.distance_status == "DATA_UNAVAILABLE":
