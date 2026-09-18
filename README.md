@@ -91,6 +91,8 @@ Outputs Constraint Satisfaction Rate (CSR), Budget Violation Rate (BVR), Grounde
 ```
 TravelPilotAI/
 ├── app.py                     # Streamlit application entrypoint
+├── api/                       # FastAPI backend server
+│   └── main.py                # REST API endpoints & serverless entrypoint
 ├── models/                    # Pydantic v2 domain schemas (evidence, transport, stay, state)
 ├── agents/                    # 12 LangGraph agent nodes with telemetry
 ├── orchestration/             # StateGraph assembly, routing, and reducers

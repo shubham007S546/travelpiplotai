@@ -33,11 +33,23 @@ from ui.agent_trace_view import render_agent_trace_view
 from ui.live_audit_view import render_live_audit_view
 from services.rag_service import TravelRAGService
 from services.pdf_service import generate_travel_pass_pdf
+from ui.voice_agent_view import (
+    render_floating_voice_agent,
+    render_elevenlabs_widget,
+    render_voice_agent_popover,
+    get_elevenlabs_agent_id
+)
 
 
 def get_live_api_catalog():
     """Returns comprehensive metadata for all live APIs utilized across the system."""
     return [
+        {
+            "name": "ElevenLabs Conversational AI",
+            "active": True,
+            "capability": f"Real-Time Two-Way Voice Agent & Audio Concierge ({get_elevenlabs_agent_id()[:18]}...)",
+            "engine": "elevenlabs.io/convai"
+        },
         {
             "name": "AviationStack Flight Telemetry",
             "active": bool(os.getenv("AVIATIONSTACK_API_KEY")),
@@ -118,6 +130,14 @@ def inject_global_website_styles():
         #MainMenu { visibility: hidden !important; }
         header[data-testid="stHeader"] { display: none !important; }
         footer { visibility: hidden !important; }
+
+        /* HIDE 0-HEIGHT IFRAMES COMPLETELY */
+        iframe[height="0"], div[data-testid="stCustomComponentRoot"]:has(iframe[height="0"]) {
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
         
         /* FULL-WIDTH LUXURY CONTAINER */
         .block-container {
@@ -408,8 +428,8 @@ def inject_global_website_styles():
 
 
 def render_top_navbar(state: TravelState):
-    """Renders the website top navbar with brand, API status popover, live telemetry, and reset actions."""
-    nav_c1, nav_c2, nav_c3 = st.columns([4, 3, 2])
+    """Renders the website top navbar with brand, API status popover, live telemetry, voice concierge, and reset actions."""
+    nav_c1, nav_c2, nav_c3, nav_c4 = st.columns([3.8, 2.7, 2.0, 1.8])
     
     with nav_c1:
         st.markdown("""
@@ -427,9 +447,9 @@ def render_top_navbar(state: TravelState):
 
     with nav_c2:
         total_calls = len(get_global_audit_log())
-        with st.popover(f"🟢 8 Live API Engines Connected ({total_calls} Calls)", use_container_width=True):
+        with st.popover(f"🟢 10 Connected Engines ({total_calls} Calls)", use_container_width=True):
             st.markdown("### ⚡ Connected Live API Catalog & Status")
-            st.caption("Live external APIs queried during agent execution to enforce ground truth.")
+            st.caption("Live external APIs and real-time voice agents queried during execution.")
             api_catalog = get_live_api_catalog()
             for api in api_catalog:
                 badge = "🟢 Live" if api["active"] else "🟡 Standby"
@@ -439,6 +459,9 @@ def render_top_navbar(state: TravelState):
                     st.caption(f"**Endpoint:** `{api['engine']}`")
 
     with nav_c3:
+        render_voice_agent_popover("🎙️ Voice Concierge")
+
+    with nav_c4:
         if st.button("🔄 Plan New Trip", use_container_width=True):
             st.session_state.pop("travel_state", None)
             st.session_state.pop("replan_banner", None)
@@ -458,6 +481,9 @@ def main():
 
     # Global Website Styles
     inject_global_website_styles()
+
+    # Floating Voice Agent (Zero layout space, persistent talk icon at bottom-right)
+    render_floating_voice_agent()
 
     # State & Services
     state: TravelState = st.session_state.get("travel_state")
@@ -639,8 +665,8 @@ def render_active_trip_dossier(state: TravelState, rag_service: TravelRAGService
     </div>
     """, unsafe_allow_html=True)
 
-    # Action Ribbon: PDF Download & Modify Plan
-    act_col1, act_col2 = st.columns([3, 2])
+    # Action Ribbon: PDF Download & Modify Plan & Voice Concierge
+    act_col1, act_col2, act_col3 = st.columns([3, 2, 2])
     with act_col1:
         try:
             pdf_bytes = generate_travel_pass_pdf(state)
@@ -658,6 +684,9 @@ def render_active_trip_dossier(state: TravelState, rag_service: TravelRAGService
     with act_col2:
         with st.popover("✏️ Modify Query / Re-run Multi-Agent Planner", use_container_width=True):
             render_input_form(is_compact=True)
+
+    with act_col3:
+        render_voice_agent_popover("🎙️ Voice Concierge")
 
     # App-Style Top Horizontal Tabs
     tab_overview, tab_transit, tab_stays, tab_sights, tab_audit = st.tabs([
